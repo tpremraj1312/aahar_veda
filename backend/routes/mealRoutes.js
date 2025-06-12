@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import authMiddleware from '../middleware/authMiddleware.js';
 import { estimateCalories } from '../services/gemini.js';
 import Meal from '../models/meal.js';
-
+// import { getAIAnalysis } from '../services/aiAnalysis.js';
 const router = express.Router();
 
 // Multer setup for file uploads
@@ -20,10 +20,14 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Estimate calories
+// @route   POST /api/meal/estimate
+// @desc    Estimate calories for a meal
+// @access  Private
 router.post('/estimate', authMiddleware, upload.single('image'), async (req, res) => {
   const { foodName, weight } = req.body;
   const imagePath = req.file ? req.file.path : null;
+
+  console.log(`[${new Date().toISOString()}] POST /api/meal/estimate: foodName=${foodName}, weight=${weight}, image=${imagePath}, userId=${req.user.id}`);
 
   if (!foodName) {
     return res.status(400).json({ error: 'Food name is required' });
@@ -36,12 +40,14 @@ router.post('/estimate', authMiddleware, upload.single('image'), async (req, res
       imageUrl: imagePath ? `/Uploads/${req.file.filename}` : null,
     });
   } catch (err) {
-    console.error('Error in /estimate:', err.message, err.stack);
+    console.error(`[${new Date().toISOString()}] Error in /estimate: ${err.message}`, err.stack);
     res.status(400).json({ error: err.message });
   }
 });
 
-// Log meal
+// @route   POST /api/meal/log
+// @desc    Log a new meal
+// @access  Private
 router.post('/log', authMiddleware, async (req, res) => {
   const {
     foodName,
@@ -54,7 +60,17 @@ router.post('/log', authMiddleware, async (req, res) => {
     consumed,
   } = req.body;
 
-  console.log('Received /log request:', req.body);
+  console.log(`[${new Date().toISOString()}] POST lk /api/meal/log:`, {
+    userId: req.user.id,
+    foodName,
+    weight,
+    calories,
+    macronutrients,
+    healthinessRating,
+    healthierAlternative,
+    imageUrl,
+    consumed,
+  });
 
   if (!foodName || !calories) {
     return res.status(400).json({ error: 'Food name and calories are required' });
@@ -62,7 +78,7 @@ router.post('/log', authMiddleware, async (req, res) => {
 
   try {
     const meal = new Meal({
-      userId: req.user.userId,
+      userId: req.user.id,
       foodName: foodName.trim(),
       weight: weight ? parseFloat(weight) : null,
       calories: parseFloat(calories),
@@ -74,42 +90,48 @@ router.post('/log', authMiddleware, async (req, res) => {
     });
 
     await meal.save();
-    console.log('Meal saved:', meal);
+    console.log(`[${new Date().toISOString()}] Meal saved:`, meal);
     res.status(201).json(meal);
   } catch (err) {
-    console.error('Error in /log:', err.message, err.stack);
+    console.error(`[${new Date().toISOString()}] Error in /log: ${err.message}`, err.stack);
     res.status(500).json({ error: `Failed to save meal: ${err.message}` });
   }
 });
 
-// Get user's meals
+// @route   GET /api/meal
+// @desc    Get user's meals
+// @access  Private
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const meals = await Meal.find({ userId: req.user.userId }).sort({ createdAt: -1 });
-    console.log('Fetched meals:', meals);
+    const meals = await Meal.find({ userId: req.user.id }).sort({ createdAt: -1 });
+    console.log(`[${new Date().toISOString()}] Fetched meals for user ${req.user.id}:`, meals.length);
     res.json(meals);
   } catch (err) {
-    console.error('Error in /meal GET:', err.message, err.stack);
-    res.status(500).json({ error: 'Failed to fetch meals: ' + err.message });
+    console.error(`[${new Date().toISOString()}] Error in /meal GET: ${err.message}`, err.stack);
+    res.status(500).json({ error: `Failed to fetch meals: ${err.message}` });
   }
 });
 
-// Delete meal
+// @route   DELETE /api/meal/:id
+// @desc    Delete a meal
+// @access  Private
 router.delete('/:id', authMiddleware, async (req, res) => {
   try {
     const meal = await Meal.findOneAndDelete({
       _id: req.params.id,
-      userId: req.user.userId,
+      userId: req.user.id,
     });
     if (!meal) {
       return res.status(404).json({ error: 'Meal not found' });
     }
-    console.log('Meal deleted:', meal);
+    console.log(`[${new Date().toISOString()}] Meal deleted for user ${req.user.id}:`, meal);
     res.json({ message: 'Meal deleted successfully' });
   } catch (err) {
-    console.error('Error in /meal DELETE:', err.message, err.stack);
-    res.status(500).json({ error: 'Failed to delete meal: ' + err.message });
+    console.error(`[${new Date().toISOString()}] Error in /meal DELETE: ${err.message}`, err.stack);
+    res.status(500).json({ error: `Failed to delete meal: ${err.message}` });
   }
 });
+
+// router.get('/ai-analysis', authMiddleware, getAIAnalysis);
 
 export default router;

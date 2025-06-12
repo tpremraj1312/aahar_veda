@@ -17,4 +17,4 @@ const mealSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-export default mongoose.model('Meal', mealSchema);
+export default mongoose.models.Meal || mongoose.model('Meal', mealSchema);

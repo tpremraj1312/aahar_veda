@@ -1,51 +1,54 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import Signup from "./pages/Signup";
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import PrivateRoute from "./components/PrivateRoute";
-import { AuthProvider } from "./context/authContext";
-import LandingPage from "./LandingPage";
-import AddMeal from "./pages/AddMeal";
-import History from "./pages/History";
-import { ToastContainer } from "react-toastify";
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import Dashboard from './pages/Dashboard';
+import History from './pages/History';
+import AddMeal from './pages/AddMeal';
+import AIAnalysis from './pages/AIAnalysis';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+// import Settings from './pages/Settings';
+import DashboardLayout from './pages/DashboardLayout';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
-function App() {
+const ProtectedRoute = ({ children }) => {
+  const token = localStorage.getItem('token'); // Use localStorage consistently
+  const location = useLocation();
+
+  if (!token) {
+    // Redirect to login, preserving the current location
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  return children;
+};
+
+const App = () => {
   return (
-    <AuthProvider>
-      <Router>
-      <ToastContainer position="top-right" autoClose={3000} />
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/dashboard"
-            element={
-              <PrivateRoute>
-                <Dashboard />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/add-meal"
-            element={
-              <PrivateRoute>
-                <AddMeal />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/history"
-            element={
-              <PrivateRoute>
-                <History />
-              </PrivateRoute>
-            }
-          />
-        </Routes>
-      </Router>
-    </AuthProvider>
+    <Router>
+      <ToastContainer />
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <DashboardLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="add-meal" element={<AddMeal />} />
+          <Route path="history" element={<History />} />
+          <Route path="ai-analysis" element={<AIAnalysis />} />
+          {/* <Route path="settings" element={<Settings />} /> */}
+          <Route path="" element={<Navigate to="dashboard" replace />} />
+        </Route>
+        <Route path="*" element={<div>404 - Page Not Found</div>} />
+      </Routes>
+    </Router>
   );
-}
+};
 
 export default App;

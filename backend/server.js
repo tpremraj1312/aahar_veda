@@ -6,6 +6,8 @@ import authRoutes from './routes/authRoutes.js';
 import mealRoutes from './routes/mealRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js'
 import historyRoutes from './routes/historyRoutes.js'
+import aiAnalysisRoutes from './routes/aiAnalysisRoutes.js'
+// import { getAIAnalysis } from './services/aiAnalysis.js';
 import authMiddleware from './middleware/authMiddleware.js';
 dotenv.config();
 
@@ -21,6 +23,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/meal',authMiddleware, mealRoutes);
 app.use('/api/dashboard',authMiddleware, dashboardRoutes);
 app.use('/api/history',authMiddleware, historyRoutes);
+app.use('/api/ai-analysis', authMiddleware, aiAnalysisRoutes);
 // MongoDB Connection
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log('MongoDB connected'))

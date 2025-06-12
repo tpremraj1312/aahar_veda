@@ -1,38 +1,75 @@
 import express from 'express';
-import User from '../models/user.js';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import User from '../models/user.js';
 
 const router = express.Router();
 
-router.post('/signup', async (req, res) => {
-  const { email, password, name } = req.body;
+// @route   POST /api/auth/login
+// @desc    Authenticate user and get token
+// @access  Public
+router.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+
   try {
-    let user = await User.findOne({ email });
-    if (user) return res.status(400).json({ error: 'User already exists' });
+    const user = await User.findOne({ email });
+    if (!user) {
+      console.log(`[${new Date().toISOString()}] Login failed: User not found for email: ${email}`);
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
 
-    user = new User({ email, password, name });
-    await user.save();
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      console.log(`[${new Date().toISOString()}] Login failed: Incorrect password for email: ${email}`);
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    res.status(201).json({ token, user: { email, name } });
+    const payload = { id: user._id };
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+    console.log(`[${new Date().toISOString()}] Login successful for user: ${user._id}, token generated`);
+    res.json({ token });
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    console.error(`[${new Date().toISOString()}] Login error: ${err.message}`);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+// @route   POST /api/auth/register
+// @desc    Register a new user
+// @access  Public
+router.post('/register', async (req, res) => {
+  const { email, password, calorieGoal, proteinGoal, carbsGoal, fatsGoal } = req.body;
+
   try {
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ error: 'Invalid credentials' });
+    let user = await User.findOne({ email });
+    if (user) {
+      console.log(`[${new Date().toISOString()}] Registration failed: Email already exists: ${email}`);
+      return res.status(400).json({ error: 'User already exists' });
+    }
 
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) return res.status(400).json({ error: 'Invalid credentials' });
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    res.json({ token, user: { email, name: user.name } });
+    user = new User({
+      email,
+      password: hashedPassword,
+      calorieGoal: calorieGoal || 2000,
+      proteinGoal: proteinGoal || 50,
+      carbsGoal: carbsGoal || 200,
+      fatsGoal: fatsGoal || 70,
+    });
+
+    await user.save();
+
+    const payload = { id: user._id };
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+    console.log(`[${new Date().toISOString()}] Registration successful for user: ${user._id}, token generated`);
+    res.json({ token });
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    console.error(`[${new Date().toISOString()}] Registration error: ${err.message}`);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

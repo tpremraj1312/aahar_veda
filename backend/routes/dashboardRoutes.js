@@ -9,11 +9,13 @@ const router = express.Router();
 const getWeekRange = (currentDate) => {
   const date = new Date(currentDate);
   const day = date.getDay(); // 0 (Sun) to 6 (Sat)
-  const diff = (day === 0 ? -1 : 6 - day); // Adjust to get to Friday as the last day
+  const diff = day === 0 ? -1 : 6 - day; // Adjust to get to Friday as the last day
   const endOfWeek = new Date(date);
   endOfWeek.setDate(date.getDate() + diff);
+  endOfWeek.setHours(23, 59, 59, 999);
   const startOfWeek = new Date(endOfWeek);
-  startOfWeek.setDate(endOfWeek.getDate() - 6); // Go back 6 days to Saturday
+  startOfWeek.setDate(endOfWeek.getDate() - 6);
+  startOfWeek.setHours(0, 0, 0, 0);
   return { startOfWeek, endOfWeek };
 };
 
@@ -21,8 +23,8 @@ const getWeekRange = (currentDate) => {
 // @desc    Get daily summary of consumed nutrients
 // @access  Private
 router.get('/summary', auth, async (req, res) => {
+  console.log(`[${new Date().toISOString()}] GET /api/dashboard/summary for user: ${req.user.id}`);
   try {
-    console.log(`GET /dashboard/summary for user: ${req.user.id}`);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
@@ -45,11 +47,10 @@ router.get('/summary', auth, async (req, res) => {
       { calories: 0, protein: 0, carbs: 0, fats: 0 }
     );
 
-    console.log('Summary response:', summary);
     res.json(summary);
   } catch (err) {
-    console.error('Error in /summary:', err.message);
-    res.status(500).json({ error: 'Server error' });
+    console.error(`Error in /summary: ${err.message}`);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -57,9 +58,9 @@ router.get('/summary', auth, async (req, res) => {
 // @desc    Get user's nutrition goals
 // @access  Private
 router.get('/goals', auth, async (req, res) => {
+  console.log(`[${new Date().toISOString()}] GET /api/dashboard/goals for user: ${req.user.id}`);
   try {
-    console.log(`GET /dashboard/goals for user: ${req.user.id}`);
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user.id).select('calorieGoal proteinGoal carbsGoal fatsGoal');
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -71,11 +72,10 @@ router.get('/goals', auth, async (req, res) => {
       fats: user.fatsGoal || 70,
     };
 
-    console.log('Goals response:', goals);
     res.json(goals);
   } catch (err) {
-    console.error('Error in /goals:', err.message);
-    res.status(500).json({ error: 'Server error' });
+    console.error(`Error in /goals: ${err.message}`);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -83,22 +83,19 @@ router.get('/goals', auth, async (req, res) => {
 // @desc    Get weekly calorie trend (Sat to Fri)
 // @access  Private
 router.get('/trend', auth, async (req, res) => {
+  console.log(`[${new Date().toISOString()}] GET /api/dashboard/trend for user: ${req.user.id}`);
   try {
-    console.log(`GET /dashboard/trend for user: ${req.user.id}`);
     const { startOfWeek, endOfWeek } = getWeekRange(new Date());
 
-    // Fetch meals for the last 7 days
     const meals = await Meal.find({
       userId: req.user.id,
       consumed: true,
       createdAt: { $gte: startOfWeek, $lte: endOfWeek },
     });
 
-    // Initialize calorie data for each day (Sat to Fri)
     const labels = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
     const calorieData = new Array(7).fill(0);
 
-    // Sum calories by day
     meals.forEach(meal => {
       const mealDate = new Date(meal.createdAt);
       const dayDiff = Math.floor((mealDate - startOfWeek) / (1000 * 60 * 60 * 24));
@@ -119,41 +116,81 @@ router.get('/trend', auth, async (req, res) => {
       ],
     };
 
-    console.log('Trend response:', {
-      labels: chartData.labels,
-      datasets: [
-        {
-          label: chartData.datasets[0].label,
-          data: chartData.datasets[0].data,
-          borderColor: chartData.datasets[0].borderColor,
-          backgroundColor: chartData.datasets[0].backgroundColor,
-        },
-      ],
-    });
     res.json(chartData);
   } catch (err) {
-    console.error('Error in /trend:', err.message);
-    res.status(500).json({ error: 'Server error' });
+    console.error(`Error in /trend: ${err.message}`);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // @route   GET /api/dashboard/suggestion
-// @desc    Get a meal suggestion (mock for now)
+// @desc    Get a meal suggestion based on user data
 // @access  Private
 router.get('/suggestion', auth, async (req, res) => {
+  console.log(`[${new Date().toISOString()}] GET /api/dashboard/suggestion for user: ${req.user.id}`);
   try {
-    console.log(`GET /dashboard/suggestion for user: ${req.user.id}`);
-    // Mock suggestion (replace with real logic if needed)
-    const suggestion = {
-      name: 'Grilled Chicken Salad',
-      calories: 300,
-    };
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
-    console.log('Suggestion response:', suggestion);
+    // Simple logic: suggest a meal based on remaining calories
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const meals = await Meal.find({
+      userId: req.user.id,
+      consumed: true,
+      createdAt: { $gte: today, $lt: tomorrow },
+    });
+
+    const totalCalories = meals.reduce((sum, meal) => sum + (meal.calories || 0), 0);
+    const calorieGoal = user.calorieGoal || 2000;
+    const remainingCalories = calorieGoal - totalCalories;
+
+    const suggestions = [
+      { name: 'Grilled Chicken Salad', calories: 300 },
+      { name: 'Veggie Stir-Fry', calories: 250 },
+      { name: 'Greek Yogurt with Fruit', calories: 200 },
+    ];
+
+    const suggestion = suggestions.find(s => s.calories <= remainingCalories) || suggestions[0];
+
     res.json(suggestion);
   } catch (err) {
-    console.error('Error in /suggestion:', err.message);
-    res.status(500).json({ error: 'Server error' });
+    console.error(`Error in /suggestion: ${err.message}`);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// @route   GET /api/dashboard/recent-meals
+//que   Get recent meals for the user
+// @access  Private
+router.get('/recent-meals', auth, async (req, res) => {
+  console.log(`[${new Date().toISOString()}] GET /api/dashboard/recent-meals for user: ${req.user.id}`);
+  try {
+    const meals = await Meal.find({ userId: req.user.id, consumed: true })
+      .sort({ createdAt: -1 })
+      .limit(10);
+
+    const formattedMeals = meals.map(meal => ({
+      _id: meal._id,
+      foodName: meal.foodName,
+      calories: meal.calories,
+      weight: meal.weight,
+      macronutrients: meal.macronutrients,
+      healthinessRating: meal.healthinessRating,
+      healthierAlternative: meal.healthierAlternative,
+      imageUrl: meal.imageUrl,
+      createdAt: meal.createdAt,
+    }));
+
+    res.json(formattedMeals);
+  } catch (err) {
+    console.error(`Error in /recent-meals: ${err.message}`);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

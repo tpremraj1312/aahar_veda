@@ -39,7 +39,7 @@ router.post('/login', async (req, res) => {
 // @desc    Register a new user
 // @access  Public
 router.post('/register', async (req, res) => {
-  const { email, password, calorieGoal, proteinGoal, carbsGoal, fatsGoal } = req.body;
+  const { email, name, password, calorieGoal, proteinGoal, carbsGoal, fatsGoal } = req.body;
 
   try {
     let user = await User.findOne({ email });
@@ -53,6 +53,7 @@ router.post('/register', async (req, res) => {
 
     user = new User({
       email,
+      name,
       password: hashedPassword,
       calorieGoal: calorieGoal || 2000,
       proteinGoal: proteinGoal || 50,
